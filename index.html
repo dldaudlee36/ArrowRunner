@@ -558,13 +558,14 @@
             font-weight: 600;
         }
 
-        /* 이스터에그: 낙하 및 슬링샷 공통 스타일 */
+        /* 이스터에그 공통 스타일 */
         .falling-arrow, .slingshot-arrow {
             position: fixed;
             pointer-events: none;
             z-index: 5;
             user-select: none;
             will-change: transform, opacity;
+            transform-origin: center center;
         }
         .falling-arrow svg, .slingshot-arrow svg {
             width: 100%;
@@ -685,6 +686,9 @@
         ArrowLeft: `<svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>`,
         ArrowRight: `<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>`
     };
+    // 이스터에그 전용: 수직 정북(↑) 단일 기준 벡터 (회전 및 신축 시 왜곡 0%)
+    const BASE_EASTER_SVG = `<svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>`;
+
     const STORAGE_KEY = 'arrow_runner_records_v1';
 
     let currentLength = 4;
@@ -911,19 +915,11 @@
         customSelect.classList.remove('open');
     });
 
-    /* [이스터에그: 당기는 정방향 조준 & 늘어남 + 정방향 발사 로직] */
-    const BASE_ROTATION = {
-        ArrowUp: 0,
-        ArrowRight: -90,
-        ArrowDown: 180,
-        ArrowLeft: 90
-    };
-
+    /* [이스터에그: 단일 기준축 정규화 + 활시위 역방향 차징 및 발사] */
     const MAX_DRAG_DIST = 160;
     let isAiming = false;
     let startX = 0, startY = 0;
     let aimEl = null;
-    let aimKey = 'ArrowUp';
     let aimColor = '#38bdf8';
 
     function shootArrow(bullet, originX, originY, shootAngle, speed) {
@@ -933,8 +929,8 @@
         const vx = Math.cos(shootAngle) * speed;
         const vy = Math.sin(shootAngle) * speed;
 
-        // 화살표 머리가 날아가는 정방향을 바라보도록 정렬
-        const visualDeg = (shootAngle * (180 / Math.PI)) + 90 + (BASE_ROTATION[aimKey] || 0);
+        // 위쪽(↑) 기준이므로 shootAngle에 90도를 더해 날아가는 탄두 각도 정렬
+        const visualDeg = (shootAngle * (180 / Math.PI)) + 90;
         bullet.style.transform = `rotate(${visualDeg}deg) scale(1, 1.4)`;
 
         function flyingLoop() {
@@ -979,8 +975,6 @@
         startY = e.clientY;
 
         const isLight = document.body.classList.contains('light-mode');
-        const arrowKeys = Object.keys(SVG_ARROWS);
-        aimKey = arrowKeys[Math.floor(Math.random() * arrowKeys.length)];
         const colors = isLight ? ['#0284c7', '#7e22ce', '#059669'] : ['#38bdf8', '#c084fc', '#34d399'];
         aimColor = colors[Math.floor(Math.random() * colors.length)];
 
@@ -990,7 +984,8 @@
         aimEl.style.height = '42px';
         aimEl.style.left = (startX - 21) + 'px';
         aimEl.style.top = (startY - 21) + 'px';
-        aimEl.innerHTML = SVG_ARROWS[aimKey];
+        // 가로/세로 축 뒤틀림 방지를 위해 정규화된 위쪽 화살표만 사용
+        aimEl.innerHTML = BASE_EASTER_SVG;
 
         const svg = aimEl.querySelector('svg');
         svg.style.stroke = aimColor;
@@ -1008,21 +1003,21 @@
         const dy = e.clientY - startY;
         const dist = Math.hypot(dx, dy);
 
-        // [수정] 마우스가 이동한 정방향(+dy, +dx) 그대로 각도 산출
-        const aimAngle = Math.atan2(dy, dx);
-        const deg = (aimAngle * (180 / Math.PI)) + 90 + (BASE_ROTATION[aimKey] || 0);
+        // 당긴 반대 방향(활시위 조준 방향) 각도 계산
+        const launchAngle = Math.atan2(-dy, -dx);
+        const deg = (launchAngle * (180 / Math.PI)) + 90;
 
-        // 160px 도달 시 즉시 해당 방향으로 자동 발사
+        // 160px 한계선 도달 시 활시위가 끊어지며 즉시 자동 격발
         if (dist >= MAX_DRAG_DIST) {
             isAiming = false;
             const bullet = aimEl;
             aimEl = null;
-            shootArrow(bullet, startX, startY, aimAngle, 50);
+            shootArrow(bullet, startX, startY, launchAngle, 50);
             return;
         }
 
-        // 끄는 방향으로 화살표 길이 연장
-        const stretchY = 1 + (dist / MAX_DRAG_DIST) * 2.0;
+        // 당긴 반대편으로 정직하게 길이(Y축)만 늘어남 (가로 왜곡 0%)
+        const stretchY = 1 + (dist / MAX_DRAG_DIST) * 2.2;
         const stretchX = Math.max(1 - (dist / MAX_DRAG_DIST) * 0.35, 0.65);
 
         aimEl.style.transform = `rotate(${deg}deg) scale(${stretchX}, ${stretchY})`;
@@ -1049,8 +1044,8 @@
             return;
         }
 
-        // [수정] 마우스를 뗀 순간, 늘어나 있던 그 정방향(+dy, +dx)으로 정직하게 발사
-        const shootAngle = Math.atan2(dy, dx);
+        // 손을 놓았을 때: 늘어나 있던 바로 그 반대 방향으로 발사
+        const shootAngle = Math.atan2(-dy, -dx);
         const shootSpeed = (dist / MAX_DRAG_DIST) * 35 + 15;
         const bullet = aimEl;
         aimEl = null;
