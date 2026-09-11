@@ -909,9 +909,9 @@
         customSelect.classList.remove('open');
     });
 
-    /* [이스터에그: 화면 여백 클릭 시 화살표 낙하 로직] */
+    /* [이스터에그: 화면 여백 클릭 시 화살표 정확히 1개씩만 낙하] */
     document.body.addEventListener('click', (e) => {
-        // 카드 패널 내부 및 상호작용 요소 클릭 시에는 발동 방지
+        // 카드 패널 내부 클릭 시 동작 방지
         if (e.target.closest('.glass-card')) return;
         if (document.body.classList.contains('reduced-motion')) return;
 
@@ -919,43 +919,37 @@
         const arrowKeys = Object.keys(SVG_ARROWS);
         const randomKey = arrowKeys[Math.floor(Math.random() * arrowKeys.length)];
 
-        // 클릭 지점 주변에서 3~5개의 화살표가 연속으로 흩날리며 낙하
-        const count = 3 + Math.floor(Math.random() * 3);
-        for (let i = 0; i < count; i++) {
-            const dropEl = document.createElement('div');
-            dropEl.className = 'falling-arrow';
+        // 단 1개의 화살표만 생성
+        const dropEl = document.createElement('div');
+        dropEl.className = 'falling-arrow';
 
-            const size = 28 + Math.floor(Math.random() * 28); // 28px ~ 56px 크기 변량
-            const offsetX = (Math.random() - 0.5) * 120;
-            const duration = 1.2 + Math.random() * 1.2; // 1.2s ~ 2.4s 낙하 속도
-            const delay = i * 0.08; // 살짝 시차를 두고 낙하
-            const rotation = ((Math.random() - 0.5) * 360) + 'deg';
+        const size = 36 + Math.floor(Math.random() * 16); // 36px ~ 52px 크기
+        const duration = 1.4 + Math.random() * 0.8;       // 1.4s ~ 2.2s 낙하 속도
+        const rotation = ((Math.random() - 0.5) * 360) + 'deg';
 
-            dropEl.style.width = size + 'px';
-            dropEl.style.height = size + 'px';
-            dropEl.style.left = (e.clientX + offsetX - size / 2) + 'px';
-            dropEl.style.top = (e.clientY - 20) + 'px';
-            dropEl.style.setProperty('--fall-rot', rotation);
-            dropEl.style.animationDuration = duration + 's';
-            dropEl.style.animationDelay = delay + 's';
+        dropEl.style.width = size + 'px';
+        dropEl.style.height = size + 'px';
+        dropEl.style.left = (e.clientX - size / 2) + 'px';
+        dropEl.style.top = (e.clientY - size / 2) + 'px';
+        dropEl.style.setProperty('--fall-rot', rotation);
+        dropEl.style.animationDuration = duration + 's';
 
-            // 네온 블루 / 퍼플 컬러 무작위 배정
-            const colors = isLight ? ['#0284c7', '#7e22ce', '#059669'] : ['#38bdf8', '#c084fc', '#34d399'];
-            const pickColor = colors[Math.floor(Math.random() * colors.length)];
+        // 네온 컬러 1종 선택
+        const colors = isLight ? ['#0284c7', '#7e22ce', '#059669'] : ['#38bdf8', '#c084fc', '#34d399'];
+        const pickColor = colors[Math.floor(Math.random() * colors.length)];
 
-            dropEl.innerHTML = SVG_ARROWS[randomKey];
-            const svg = dropEl.querySelector('svg');
-            svg.style.stroke = pickColor;
-            svg.style.strokeWidth = '2.5';
-            svg.style.filter = `drop-shadow(0 0 6px ${pickColor})`;
+        dropEl.innerHTML = SVG_ARROWS[randomKey];
+        const svg = dropEl.querySelector('svg');
+        svg.style.stroke = pickColor;
+        svg.style.strokeWidth = '2.5';
+        svg.style.filter = `drop-shadow(0 0 8px ${pickColor})`;
 
-            document.body.appendChild(dropEl);
+        document.body.appendChild(dropEl);
 
-            // 낙하 애니메이션 완료 즉시 DOM에서 영구 소멸 (메모리 누수 0)
-            dropEl.addEventListener('animationend', () => {
-                dropEl.remove();
-            });
-        }
+        // 낙하 완료 즉시 DOM에서 영구 제거
+        dropEl.addEventListener('animationend', () => {
+            dropEl.remove();
+        });
     });
 
     renderHistory();
