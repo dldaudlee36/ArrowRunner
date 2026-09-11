@@ -557,16 +557,15 @@
             font-weight: 600;
         }
 
-        /* [이스터에그: 낙하하는 화살표 파티클 애니메이션] */
-        .falling-arrow {
+        /* [이스터에그: 낙하 및 슬링샷 발사 화살표 공통 스타일] */
+        .falling-arrow, .slingshot-arrow {
             position: fixed;
             pointer-events: none;
-            z-index: 5; /* 카드 뒤~배경 위 레이어 */
+            z-index: 5;
             user-select: none;
             will-change: transform, opacity;
-            animation: fallToFloor linear forwards;
         }
-        .falling-arrow svg {
+        .falling-arrow svg, .slingshot-arrow svg {
             width: 100%;
             height: 100%;
             fill: none;
@@ -574,18 +573,31 @@
             stroke-linejoin: round;
         }
 
+        .falling-arrow {
+            animation: fallToFloor linear forwards;
+        }
+
         @keyframes fallToFloor {
-            0% {
-                transform: translateY(0) rotate(0deg) scale(0.8);
-                opacity: 0.9;
-            }
-            75% {
-                opacity: 0.8;
-            }
-            100% {
-                transform: translateY(105vh) rotate(var(--fall-rot)) scale(1.1);
-                opacity: 0;
-            }
+            0% { transform: translateY(0) rotate(0deg) scale(0.8); opacity: 0.9; }
+            75% { opacity: 0.8; }
+            100% { transform: translateY(105vh) rotate(var(--fall-rot)) scale(1.1); opacity: 0; }
+        }
+
+        /* 벽에 박힌 후 페이드 아웃 */
+        .slingshot-arrow.stuck {
+            transition: opacity 1.2s ease-out;
+            opacity: 0 !important;
+        }
+
+        body.reduced-motion * {
+            transition: none !important;
+            transform: none !important;
+            animation: none !important;
+            box-shadow: none !important;
+        }
+        body.reduced-motion .falling-arrow,
+        body.reduced-motion .slingshot-arrow {
+            display: none !important;
         }
 
         body.reduced-motion * {
@@ -909,47 +921,132 @@
         customSelect.classList.remove('open');
     });
 
-    /* [이스터에그: 화면 여백 클릭 시 화살표 정확히 1개씩만 낙하] */
-    document.body.addEventListener('click', (e) => {
-        // 카드 패널 내부 클릭 시 동작 방지
+   /* [이스터에그: 클릭 시 1개 낙하 + 드래그 차징 시 활처럼 늘어나 발사 및 벽 박힘] */
+    let isAiming = false;
+    let startX = 0, startY = 0;
+    let aimEl = null;
+    let aimKey = '';
+    let aimColor = '';
+
+    document.addEventListener('mousedown', (e) => {
         if (e.target.closest('.glass-card')) return;
         if (document.body.classList.contains('reduced-motion')) return;
+        if (e.button !== 0) return; // 좌클릭만 허용
+
+        isAiming = true;
+        startX = e.clientX;
+        startY = e.clientY;
 
         const isLight = document.body.classList.contains('light-mode');
         const arrowKeys = Object.keys(SVG_ARROWS);
-        const randomKey = arrowKeys[Math.floor(Math.random() * arrowKeys.length)];
-
-        // 단 1개의 화살표만 생성
-        const dropEl = document.createElement('div');
-        dropEl.className = 'falling-arrow';
-
-        const size = 36 + Math.floor(Math.random() * 16); // 36px ~ 52px 크기
-        const duration = 1.4 + Math.random() * 0.8;       // 1.4s ~ 2.2s 낙하 속도
-        const rotation = ((Math.random() - 0.5) * 360) + 'deg';
-
-        dropEl.style.width = size + 'px';
-        dropEl.style.height = size + 'px';
-        dropEl.style.left = (e.clientX - size / 2) + 'px';
-        dropEl.style.top = (e.clientY - size / 2) + 'px';
-        dropEl.style.setProperty('--fall-rot', rotation);
-        dropEl.style.animationDuration = duration + 's';
-
-        // 네온 컬러 1종 선택
+        aimKey = arrowKeys[Math.floor(Math.random() * arrowKeys.length)];
         const colors = isLight ? ['#0284c7', '#7e22ce', '#059669'] : ['#38bdf8', '#c084fc', '#34d399'];
-        const pickColor = colors[Math.floor(Math.random() * colors.length)];
+        aimColor = colors[Math.floor(Math.random() * colors.length)];
 
-        dropEl.innerHTML = SVG_ARROWS[randomKey];
-        const svg = dropEl.querySelector('svg');
-        svg.style.stroke = pickColor;
-        svg.style.strokeWidth = '2.5';
-        svg.style.filter = `drop-shadow(0 0 8px ${pickColor})`;
+        aimEl = document.createElement('div');
+        aimEl.className = 'slingshot-arrow';
+        aimEl.style.width = '42px';
+        aimEl.style.height = '42px';
+        aimEl.style.left = (startX - 21) + 'px';
+        aimEl.style.top = (startY - 21) + 'px';
+        aimEl.innerHTML = SVG_ARROWS[aimKey];
 
-        document.body.appendChild(dropEl);
+        const svg = aimEl.querySelector('svg');
+        svg.style.stroke = aimColor;
+        svg.style.strokeWidth = '2.8';
+        svg.style.filter = `drop-shadow(0 0 10px ${aimColor})`;
 
-        // 낙하 완료 즉시 DOM에서 영구 제거
-        dropEl.addEventListener('animationend', () => {
-            dropEl.remove();
-        });
+        document.body.appendChild(aimEl);
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isAiming || !aimEl) return;
+
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        const dist = Math.hypot(dx, dy);
+
+        // 당긴 반대 방향(발사될 각도) 계산
+        // SVG 기본이 상단(Up) 기준이므로 회전 오프셋 보정
+        const launchAngle = Math.atan2(-dy, -dx);
+        const deg = launchAngle * (180 / Math.PI) + 90;
+
+        // 당길수록 활처럼 길이(Y축)가 늘어나는 탄성 효과
+        const stretchY = Math.min(1 + dist / 60, 3.2);
+        const stretchX = Math.max(1 - dist / 300, 0.65);
+
+        aimEl.style.transform = `rotate(${deg}deg) scale(${stretchX}, ${stretchY})`;
+        aimEl.style.opacity = '1';
+    });
+
+    document.addEventListener('mouseup', (e) => {
+        if (!isAiming || !aimEl) return;
+        isAiming = false;
+
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        const dist = Math.hypot(dx, dy);
+
+        // 드래그 거리가 10px 미만인 단순 클릭: 기존처럼 '단발 1개 바닥 낙하'
+        if (dist < 10) {
+            aimEl.className = 'falling-arrow';
+            const rotation = ((Math.random() - 0.5) * 360) + 'deg';
+            aimEl.style.setProperty('--fall-rot', rotation);
+            aimEl.style.animationDuration = (1.4 + Math.random() * 0.6) + 's';
+            aimEl.style.transform = 'none';
+
+            aimEl.addEventListener('animationend', () => aimEl.remove());
+            aimEl = null;
+            return;
+        }
+
+        // 10px 이상 드래그 후 놓았을 때: 당긴 반대 방향으로 고속 발사
+        playBeep(600, 'triangle');
+        const shootAngle = Math.atan2(-dy, -dx);
+        const shootSpeed = Math.min(dist * 0.35 + 20, 55); // 당긴 거리에 비례한 탄속
+        let posX = startX - 21;
+        let posY = startY - 21;
+        const vx = Math.cos(shootAngle) * shootSpeed;
+        const vy = Math.sin(shootAngle) * shootSpeed;
+
+        const bullet = aimEl;
+        aimEl = null;
+
+        // 발사 시 탄성 복원 및 궤적 고정
+        const fixedDeg = shootAngle * (180 / Math.PI) + 90;
+        bullet.style.transform = `rotate(${fixedDeg}deg) scale(1, 1.4)`;
+
+        function flyingLoop() {
+            posX += vx;
+            posY += vy;
+
+            // 브라우저 4면 벽면 도달 체크
+            const hitLeft = posX <= 10;
+            const hitRight = posX >= window.innerWidth - 50;
+            const hitTop = posY <= 10;
+            const hitBottom = posY >= window.innerHeight - 50;
+
+            if (hitLeft || hitRight || hitTop || hitBottom) {
+                // 벽에 정확히 박힘: 위치 고정 + 타격 사운드 + 꽂히는 흔들림 연출
+                playBeep(240, 'square');
+                bullet.style.left = Math.max(0, Math.min(window.innerWidth - 42, posX)) + 'px';
+                bullet.style.top = Math.max(0, Math.min(window.innerHeight - 42, posY)) + 'px';
+                bullet.style.transform = `rotate(${fixedDeg}deg) scale(1, 0.95)`;
+
+                // 박힌 상태 유지 후 0.4초 뒤 서서히 페이드 아웃 소멸
+                setTimeout(() => {
+                    bullet.classList.add('stuck');
+                    setTimeout(() => bullet.remove(), 1200);
+                }, 400);
+                return;
+            }
+
+            bullet.style.left = posX + 'px';
+            bullet.style.top = posY + 'px';
+            requestAnimationFrame(flyingLoop);
+        }
+
+        requestAnimationFrame(flyingLoop);
     });
 
     renderHistory();
