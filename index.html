@@ -911,7 +911,7 @@
         customSelect.classList.remove('open');
     });
 
-    /* [이스터에그: 각도 정규화 + 한계선(160px) 자동 격발 + 텍스트 선택 완벽 차단] */
+    /* [이스터에그: 당기는 정방향 조준 & 늘어남 + 정방향 발사 로직] */
     const BASE_ROTATION = {
         ArrowUp: 0,
         ArrowRight: -90,
@@ -933,6 +933,7 @@
         const vx = Math.cos(shootAngle) * speed;
         const vy = Math.sin(shootAngle) * speed;
 
+        // 화살표 머리가 날아가는 정방향을 바라보도록 정렬
         const visualDeg = (shootAngle * (180 / Math.PI)) + 90 + (BASE_ROTATION[aimKey] || 0);
         bullet.style.transform = `rotate(${visualDeg}deg) scale(1, 1.4)`;
 
@@ -971,7 +972,7 @@
         if (document.body.classList.contains('reduced-motion')) return;
         if (e.button !== 0) return;
 
-        e.preventDefault(); // 텍스트 블록 지정 차단
+        e.preventDefault();
 
         isAiming = true;
         startX = e.clientX;
@@ -1007,18 +1008,20 @@
         const dy = e.clientY - startY;
         const dist = Math.hypot(dx, dy);
 
-        const launchAngle = Math.atan2(-dy, -dx);
-        const deg = (launchAngle * (180 / Math.PI)) + 90 + (BASE_ROTATION[aimKey] || 0);
+        // [수정] 마우스가 이동한 정방향(+dy, +dx) 그대로 각도 산출
+        const aimAngle = Math.atan2(dy, dx);
+        const deg = (aimAngle * (180 / Math.PI)) + 90 + (BASE_ROTATION[aimKey] || 0);
 
-        // 최대 한계선 초과 시 즉시 자동 발사
+        // 160px 도달 시 즉시 해당 방향으로 자동 발사
         if (dist >= MAX_DRAG_DIST) {
             isAiming = false;
             const bullet = aimEl;
             aimEl = null;
-            shootArrow(bullet, startX, startY, launchAngle, 50);
+            shootArrow(bullet, startX, startY, aimAngle, 50);
             return;
         }
 
+        // 끄는 방향으로 화살표 길이 연장
         const stretchY = 1 + (dist / MAX_DRAG_DIST) * 2.0;
         const stretchX = Math.max(1 - (dist / MAX_DRAG_DIST) * 0.35, 0.65);
 
@@ -1033,7 +1036,7 @@
         const dy = e.clientY - startY;
         const dist = Math.hypot(dx, dy);
 
-        // 단순 클릭(10px 미만) 시 단발 1개 낙하
+        // 10px 미만 단순 클릭: 단발 1개 낙하
         if (dist < 10) {
             aimEl.className = 'falling-arrow';
             const rotation = ((Math.random() - 0.5) * 360) + 'deg';
@@ -1046,8 +1049,8 @@
             return;
         }
 
-        // 최대치 이전 손을 뗐을 때 수동 발사
-        const shootAngle = Math.atan2(-dy, -dx);
+        // [수정] 마우스를 뗀 순간, 늘어나 있던 그 정방향(+dy, +dx)으로 정직하게 발사
+        const shootAngle = Math.atan2(dy, dx);
         const shootSpeed = (dist / MAX_DRAG_DIST) * 35 + 15;
         const bullet = aimEl;
         aimEl = null;
