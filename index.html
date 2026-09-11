@@ -81,7 +81,6 @@
         
         body {
             background-color: var(--bg);
-            /* [방향키 키캡 클러스터 SVG 벡터 패턴] */
             background-image: 
                 radial-gradient(at 20% 15%, rgba(56, 189, 248, 0.15) 0px, transparent 45%),
                 radial-gradient(at 80% 85%, rgba(192, 132, 252, 0.15) 0px, transparent 45%),
@@ -92,8 +91,10 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            overflow: hidden; /* 낙하 요소로 인한 스크롤바 생성 방지 */
+            overflow: hidden;
             position: relative;
+            user-select: none;
+            -webkit-user-select: none;
             transition: background 0.3s ease, color 0.3s ease;
         }
 
@@ -557,7 +558,7 @@
             font-weight: 600;
         }
 
-        /* [이스터에그: 낙하 및 슬링샷 발사 화살표 공통 스타일] */
+        /* 이스터에그: 낙하 및 슬링샷 공통 스타일 */
         .falling-arrow, .slingshot-arrow {
             position: fixed;
             pointer-events: none;
@@ -583,7 +584,6 @@
             100% { transform: translateY(105vh) rotate(var(--fall-rot)) scale(1.1); opacity: 0; }
         }
 
-        /* 벽에 박힌 후 페이드 아웃 */
         .slingshot-arrow.stuck {
             transition: opacity 1.2s ease-out;
             opacity: 0 !important;
@@ -597,16 +597,6 @@
         }
         body.reduced-motion .falling-arrow,
         body.reduced-motion .slingshot-arrow {
-            display: none !important;
-        }
-
-        body.reduced-motion * {
-            transition: none !important;
-            transform: none !important;
-            animation: none !important;
-            box-shadow: none !important;
-        }
-        body.reduced-motion .falling-arrow {
             display: none !important;
         }
     </style>
@@ -921,17 +911,67 @@
         customSelect.classList.remove('open');
     });
 
-   /* [이스터에그: 클릭 시 1개 낙하 + 드래그 차징 시 활처럼 늘어나 발사 및 벽 박힘] */
+    /* [이스터에그: 각도 정규화 + 한계선(160px) 자동 격발 + 텍스트 선택 완벽 차단] */
+    const BASE_ROTATION = {
+        ArrowUp: 0,
+        ArrowRight: -90,
+        ArrowDown: 180,
+        ArrowLeft: 90
+    };
+
+    const MAX_DRAG_DIST = 160;
     let isAiming = false;
     let startX = 0, startY = 0;
     let aimEl = null;
-    let aimKey = '';
-    let aimColor = '';
+    let aimKey = 'ArrowUp';
+    let aimColor = '#38bdf8';
+
+    function shootArrow(bullet, originX, originY, shootAngle, speed) {
+        playBeep(600, 'triangle');
+        let posX = originX - 21;
+        let posY = originY - 21;
+        const vx = Math.cos(shootAngle) * speed;
+        const vy = Math.sin(shootAngle) * speed;
+
+        const visualDeg = (shootAngle * (180 / Math.PI)) + 90 + (BASE_ROTATION[aimKey] || 0);
+        bullet.style.transform = `rotate(${visualDeg}deg) scale(1, 1.4)`;
+
+        function flyingLoop() {
+            posX += vx;
+            posY += vy;
+
+            const hitLeft = posX <= 10;
+            const hitRight = posX >= window.innerWidth - 50;
+            const hitTop = posY <= 10;
+            const hitBottom = posY >= window.innerHeight - 50;
+
+            if (hitLeft || hitRight || hitTop || hitBottom) {
+                playBeep(240, 'square');
+                bullet.style.left = Math.max(0, Math.min(window.innerWidth - 42, posX)) + 'px';
+                bullet.style.top = Math.max(0, Math.min(window.innerHeight - 42, posY)) + 'px';
+                bullet.style.transform = `rotate(${visualDeg}deg) scale(1, 0.95)`;
+
+                setTimeout(() => {
+                    bullet.classList.add('stuck');
+                    setTimeout(() => bullet.remove(), 1200);
+                }, 400);
+                return;
+            }
+
+            bullet.style.left = posX + 'px';
+            bullet.style.top = posY + 'px';
+            requestAnimationFrame(flyingLoop);
+        }
+
+        requestAnimationFrame(flyingLoop);
+    }
 
     document.addEventListener('mousedown', (e) => {
         if (e.target.closest('.glass-card')) return;
         if (document.body.classList.contains('reduced-motion')) return;
-        if (e.button !== 0) return; // 좌클릭만 허용
+        if (e.button !== 0) return;
+
+        e.preventDefault(); // 텍스트 블록 지정 차단
 
         isAiming = true;
         startX = e.clientX;
@@ -961,22 +1001,28 @@
 
     document.addEventListener('mousemove', (e) => {
         if (!isAiming || !aimEl) return;
+        e.preventDefault();
 
         const dx = e.clientX - startX;
         const dy = e.clientY - startY;
         const dist = Math.hypot(dx, dy);
 
-        // 당긴 반대 방향(발사될 각도) 계산
-        // SVG 기본이 상단(Up) 기준이므로 회전 오프셋 보정
         const launchAngle = Math.atan2(-dy, -dx);
-        const deg = launchAngle * (180 / Math.PI) + 90;
+        const deg = (launchAngle * (180 / Math.PI)) + 90 + (BASE_ROTATION[aimKey] || 0);
 
-        // 당길수록 활처럼 길이(Y축)가 늘어나는 탄성 효과
-        const stretchY = Math.min(1 + dist / 60, 3.2);
-        const stretchX = Math.max(1 - dist / 300, 0.65);
+        // 최대 한계선 초과 시 즉시 자동 발사
+        if (dist >= MAX_DRAG_DIST) {
+            isAiming = false;
+            const bullet = aimEl;
+            aimEl = null;
+            shootArrow(bullet, startX, startY, launchAngle, 50);
+            return;
+        }
+
+        const stretchY = 1 + (dist / MAX_DRAG_DIST) * 2.0;
+        const stretchX = Math.max(1 - (dist / MAX_DRAG_DIST) * 0.35, 0.65);
 
         aimEl.style.transform = `rotate(${deg}deg) scale(${stretchX}, ${stretchY})`;
-        aimEl.style.opacity = '1';
     });
 
     document.addEventListener('mouseup', (e) => {
@@ -987,7 +1033,7 @@
         const dy = e.clientY - startY;
         const dist = Math.hypot(dx, dy);
 
-        // 드래그 거리가 10px 미만인 단순 클릭: 기존처럼 '단발 1개 바닥 낙하'
+        // 단순 클릭(10px 미만) 시 단발 1개 낙하
         if (dist < 10) {
             aimEl.className = 'falling-arrow';
             const rotation = ((Math.random() - 0.5) * 360) + 'deg';
@@ -1000,53 +1046,13 @@
             return;
         }
 
-        // 10px 이상 드래그 후 놓았을 때: 당긴 반대 방향으로 고속 발사
-        playBeep(600, 'triangle');
+        // 최대치 이전 손을 뗐을 때 수동 발사
         const shootAngle = Math.atan2(-dy, -dx);
-        const shootSpeed = Math.min(dist * 0.35 + 20, 55); // 당긴 거리에 비례한 탄속
-        let posX = startX - 21;
-        let posY = startY - 21;
-        const vx = Math.cos(shootAngle) * shootSpeed;
-        const vy = Math.sin(shootAngle) * shootSpeed;
-
+        const shootSpeed = (dist / MAX_DRAG_DIST) * 35 + 15;
         const bullet = aimEl;
         aimEl = null;
 
-        // 발사 시 탄성 복원 및 궤적 고정
-        const fixedDeg = shootAngle * (180 / Math.PI) + 90;
-        bullet.style.transform = `rotate(${fixedDeg}deg) scale(1, 1.4)`;
-
-        function flyingLoop() {
-            posX += vx;
-            posY += vy;
-
-            // 브라우저 4면 벽면 도달 체크
-            const hitLeft = posX <= 10;
-            const hitRight = posX >= window.innerWidth - 50;
-            const hitTop = posY <= 10;
-            const hitBottom = posY >= window.innerHeight - 50;
-
-            if (hitLeft || hitRight || hitTop || hitBottom) {
-                // 벽에 정확히 박힘: 위치 고정 + 타격 사운드 + 꽂히는 흔들림 연출
-                playBeep(240, 'square');
-                bullet.style.left = Math.max(0, Math.min(window.innerWidth - 42, posX)) + 'px';
-                bullet.style.top = Math.max(0, Math.min(window.innerHeight - 42, posY)) + 'px';
-                bullet.style.transform = `rotate(${fixedDeg}deg) scale(1, 0.95)`;
-
-                // 박힌 상태 유지 후 0.4초 뒤 서서히 페이드 아웃 소멸
-                setTimeout(() => {
-                    bullet.classList.add('stuck');
-                    setTimeout(() => bullet.remove(), 1200);
-                }, 400);
-                return;
-            }
-
-            bullet.style.left = posX + 'px';
-            bullet.style.top = posY + 'px';
-            requestAnimationFrame(flyingLoop);
-        }
-
-        requestAnimationFrame(flyingLoop);
+        shootArrow(bullet, startX, startY, shootAngle, shootSpeed);
     });
 
     renderHistory();
