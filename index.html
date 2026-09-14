@@ -876,12 +876,16 @@
         }, 80);
     }
     window.addEventListener('keydown', e => {
-        if (e.code === 'KeyR') { startNewGame(); return; }
-        if (e.code === 'Space') {
-            e.preventDefault();
-            togglePause();
+        // [치트키 버퍼 감지]
+        cheatHistory.push(e.code);
+        if (cheatHistory.length > CHEAT_CODE.length) cheatHistory.shift();
+        if (cheatHistory.join(',') === CHEAT_CODE.join(',')) {
+            cheatHistory = [];
+            triggerGodMode();
             return;
         }
+
+        // ... 기존 keydown 로직 유지 ...
 
         if (gameState !== 'PLAYING' || isProcessingMiss) return;
 
