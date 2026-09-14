@@ -171,6 +171,7 @@
             background: linear-gradient(180deg, #ffffff 30%, var(--text-muted) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            transition: all 0.3s ease;
         }
         body.light-mode h1 {
             background: linear-gradient(180deg, #0f172a 30%, #475569 100%);
@@ -706,6 +707,73 @@
     let mainInterval = null;
     let lastTime = null;
     let isProcessingMiss = false;
+    let isGodModeRunning = false;
+
+    /* [치트키 엔진: 코나미 커맨드 (↑ ↑ ↓ ↓ ← → ← → B A)] */
+    const CHEAT_SEQUENCE = [
+        'ArrowUp', 'ArrowUp', 
+        'ArrowDown', 'ArrowDown', 
+        'ArrowLeft', 'ArrowRight', 
+        'ArrowLeft', 'ArrowRight', 
+        'KeyB', 'KeyA'
+    ];
+    let cheatBuffer = [];
+
+    function triggerGodMode() {
+        if (isGodModeRunning) return;
+        isGodModeRunning = true;
+
+        if (gameState !== 'PLAYING') startNewGame();
+
+        // 4단 아르페지오 승리 팡파르 사운드
+        [523, 659, 784, 1046, 1318].forEach((freq, idx) => {
+            setTimeout(() => playBeep(freq, 'triangle'), idx * 70);
+        });
+
+        // 황금빛 네온 비주얼 연출
+        const titleEl = document.querySelector('h1');
+        const originalTitle = titleEl.textContent;
+        titleEl.textContent = '★ GOD MODE ACTIVATED ★';
+        titleEl.style.background = 'linear-gradient(90deg, #f59e0b, #fbbf24, #fef08a)';
+        titleEl.style.webkitBackgroundClip = 'text';
+        titleEl.style.webkitTextFillColor = 'transparent';
+
+        // 0.06초 간격 초고속 자동 오토 클리어
+        const godInterval = setInterval(() => {
+            if (gameState !== 'PLAYING') {
+                clearInterval(godInterval);
+                isGodModeRunning = false;
+                setTimeout(() => {
+                    titleEl.textContent = originalTitle;
+                    titleEl.style.background = '';
+                    titleEl.style.webkitBackgroundClip = '';
+                    titleEl.style.webkitTextFillColor = '';
+                }, 2000);
+                return;
+            }
+
+            playBeep(880, 'sine');
+            currentIndex++;
+            if (currentIndex >= sequence.length) {
+                currentSet++;
+                if (currentSet >= TARGET_SETS) {
+                    endGame(true);
+                    clearInterval(godInterval);
+                    isGodModeRunning = false;
+                    setTimeout(() => {
+                        titleEl.textContent = originalTitle;
+                        titleEl.style.background = '';
+                        titleEl.style.webkitBackgroundClip = '';
+                        titleEl.style.webkitTextFillColor = '';
+                    }, 2500);
+                } else {
+                    currentIndex = 0;
+                    sequence = generateSequence(currentLength);
+                }
+            }
+            renderSequence();
+        }, 60);
+    }
 
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     let audioCtx = null;
@@ -821,36 +889,61 @@
         }
     }
 
-    /* [핵심 수정: 캡처링 모드(true) 및 다중 키코드 완벽 바인딩] */
+    /* [최우선 캡처링 키보드 이벤트 핸들러] */
     document.addEventListener('keydown', e => {
         const code = e.code || '';
-        const key = e.key || '';
+        const key = e.key ? e.key.toLowerCase() : '';
 
-        // 1. R키 (게임 시작 / 재시작)
-        if (code === 'KeyR' || key === 'r' || key === 'R' || key === 'ㄱ') {
+        // [치트키 버퍼 수집 및 판정: 한글 자판 b/ㅠ, a/ㅁ 완벽 포괄]
+        let cheatInput = code;
+        if (!cheatInput) {
+            if (key === 'b' || key === 'ㅠ') cheatInput = 'KeyB';
+            else if (key === 'a' || key === 'ㅁ') cheatInput = 'KeyA';
+        } else if (code === 'KeyB' || key === 'b' || key === 'ㅠ') {
+            cheatInput = 'KeyB';
+        } else if (code === 'KeyA' || key === 'a' || key === 'ㅁ') {
+            cheatInput = 'KeyA';
+        }
+
+        if (CHEAT_SEQUENCE.includes(cheatInput)) {
+            cheatBuffer.push(cheatInput);
+            if (cheatBuffer.length > CHEAT_SEQUENCE.length) cheatBuffer.shift();
+
+            if (cheatBuffer.join(',') === CHEAT_SEQUENCE.join(',')) {
+                e.preventDefault();
+                e.stopPropagation();
+                cheatBuffer = [];
+                triggerGodMode();
+                return;
+            }
+        } else {
+            cheatBuffer = [];
+        }
+
+        // 1. R키 시작
+        if (code === 'KeyR' || key === 'r' || key === 'ㄱ') {
             e.preventDefault();
             e.stopPropagation();
             startNewGame();
             return;
         }
 
-        // 2. Space키 (일시정지 / 재개)
-        if (code === 'Space' || key === ' ' || key === 'Spacebar') {
+        // 2. Space키 일시정지
+        if (code === 'Space' || key === ' ' || key === 'spacebar') {
             e.preventDefault();
             e.stopPropagation();
             togglePause();
             return;
         }
 
-        // 게임 진행 중이 아니거나 오답 연출 중일 때는 방향키 무시
-        if (gameState !== 'PLAYING' || isProcessingMiss) return;
+        if (gameState !== 'PLAYING' || isProcessingMiss || isGodModeRunning) return;
 
-        // 3. 방향키 판정 (ArrowUp, ArrowDown, ArrowLeft, ArrowRight)
+        // 3. 방향키 게임 조작
         let pressedArrow = null;
-        if (code === 'ArrowUp' || key === 'ArrowUp') pressedArrow = 'ArrowUp';
-        else if (code === 'ArrowDown' || key === 'ArrowDown') pressedArrow = 'ArrowDown';
-        else if (code === 'ArrowLeft' || key === 'ArrowLeft') pressedArrow = 'ArrowLeft';
-        else if (code === 'ArrowRight' || key === 'ArrowRight') pressedArrow = 'ArrowRight';
+        if (code === 'ArrowUp' || key === 'arrowup') pressedArrow = 'ArrowUp';
+        else if (code === 'ArrowDown' || key === 'arrowdown') pressedArrow = 'ArrowDown';
+        else if (code === 'ArrowLeft' || key === 'arrowleft') pressedArrow = 'ArrowLeft';
+        else if (code === 'ArrowRight' || key === 'arrowright') pressedArrow = 'ArrowRight';
 
         if (pressedArrow) {
             e.preventDefault();
@@ -887,7 +980,7 @@
                 }, 220);
             }
         }
-    }, true); // <- 캡처링 우선순위 강제(true)
+    }, true);
 
     document.getElementById('themeToggleBtn').addEventListener('click', (e) => {
         const isLight = document.body.classList.toggle('light-mode');
