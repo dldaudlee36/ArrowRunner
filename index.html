@@ -661,7 +661,7 @@
     <div class="glass-card" style="justify-content:center;">
         <div class="stage-container">
             <div id="arrowStream" class="arrow-stream">
-                <span style="color:var(--text-muted); font-size:0.85rem;">[게임 시작] 버튼을 눌러 시퀀스를 호출하세요</span>
+                <span style="color:var(--text-muted); font-size:0.85rem;">[게임 시작] 버튼을 누르거나 키보드 R을 눌러 시작하세요</span>
             </div>
         </div>
 
@@ -821,30 +821,42 @@
         }
     }
 
-    /* [수정] 한글 자판(ㄱ), 대소문자(r/R), 포커스 억제 완벽 지원 키보드 이벤트 */
-    window.addEventListener('keydown', e => {
-        const key = e.key ? e.key.toLowerCase() : '';
+    /* [핵심 수정: 캡처링 모드(true) 및 다중 키코드 완벽 바인딩] */
+    document.addEventListener('keydown', e => {
         const code = e.code || '';
+        const key = e.key || '';
 
-        // R 시작 키: 한글 자판 상태(ㄱ), CapsLock, 대소문자 모두 완벽 대응
-        if (code === 'KeyR' || key === 'r' || key === 'ㄱ') {
+        // 1. R키 (게임 시작 / 재시작)
+        if (code === 'KeyR' || key === 'r' || key === 'R' || key === 'ㄱ') {
             e.preventDefault();
+            e.stopPropagation();
             startNewGame();
             return;
         }
 
-        // Space 일시정지 키
-        if (code === 'Space' || key === ' ') {
+        // 2. Space키 (일시정지 / 재개)
+        if (code === 'Space' || key === ' ' || key === 'Spacebar') {
             e.preventDefault();
+            e.stopPropagation();
             togglePause();
             return;
         }
 
+        // 게임 진행 중이 아니거나 오답 연출 중일 때는 방향키 무시
         if (gameState !== 'PLAYING' || isProcessingMiss) return;
 
-        if (ARROWS.includes(code)) {
+        // 3. 방향키 판정 (ArrowUp, ArrowDown, ArrowLeft, ArrowRight)
+        let pressedArrow = null;
+        if (code === 'ArrowUp' || key === 'ArrowUp') pressedArrow = 'ArrowUp';
+        else if (code === 'ArrowDown' || key === 'ArrowDown') pressedArrow = 'ArrowDown';
+        else if (code === 'ArrowLeft' || key === 'ArrowLeft') pressedArrow = 'ArrowLeft';
+        else if (code === 'ArrowRight' || key === 'ArrowRight') pressedArrow = 'ArrowRight';
+
+        if (pressedArrow) {
             e.preventDefault();
-            if (code === sequence[currentIndex]) {
+            e.stopPropagation();
+
+            if (pressedArrow === sequence[currentIndex]) {
                 playBeep(440);
                 currentIndex++;
                 if (currentIndex >= sequence.length) {
@@ -875,14 +887,12 @@
                 }, 220);
             }
         }
-    });
-
-    window.addEventListener('blur', () => { if (gameState === 'PLAYING') setStatus('PAUSED'); });
+    }, true); // <- 캡처링 우선순위 강제(true)
 
     document.getElementById('themeToggleBtn').addEventListener('click', (e) => {
         const isLight = document.body.classList.toggle('light-mode');
         document.getElementById('themeToggleBtn').textContent = isLight ? 'Dark Mode' : 'Light Mode';
-        e.currentTarget.blur(); // 포커스 해제
+        e.currentTarget.blur();
     });
 
     document.getElementById('motionToggle').addEventListener('change', e => {
@@ -904,7 +914,6 @@
         });
     }
 
-    // 마우스 클릭 후 키보드 R키 먹통 현상 방지: click 후 즉각 blur()
     document.getElementById('startBtn').addEventListener('click', (e) => {
         startNewGame();
         e.currentTarget.blur();
@@ -930,13 +939,15 @@
     });
 
     options.forEach(opt => {
-        opt.addEventListener('click', () => {
+        opt.addEventListener('click', (e) => {
+            e.stopPropagation();
             options.forEach(o => o.classList.remove('selected'));
             opt.classList.add('selected');
             selectedText.textContent = opt.textContent;
             currentLength = parseInt(opt.getAttribute('data-value'), 10);
             customSelect.classList.remove('open');
             playBeep(520);
+            if (gameState === 'PLAYING') startNewGame();
         });
     });
 
@@ -944,7 +955,7 @@
         customSelect.classList.remove('open');
     });
 
-    /* [이스터에그: 단일 기준축 정규화 + 활시위 역방향 차징 및 발사] */
+    /* [이스터에그 슬링샷 로직] */
     const MAX_DRAG_DIST = 160;
     let isAiming = false;
     let startX = 0, startY = 0;
