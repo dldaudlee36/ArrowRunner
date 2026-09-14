@@ -231,11 +231,10 @@
             box-shadow: inset 0 2px 6px rgba(0,0,0,0.08);
         }
 
-        /* [수정] 줄바꿈 절대 금지 및 1열 완벽 수평 정렬 */
         .arrow-stream {
             display: flex;
-            flex-wrap: nowrap !important; /* 줄바꿈 금지 */
-            gap: 8px; /* 7개 배치 최적 간격 */
+            flex-wrap: nowrap !important;
+            gap: 8px;
             justify-content: center;
             align-items: center;
             width: 100%;
@@ -243,11 +242,10 @@
             z-index: 2;
         }
 
-        /* [수정] 7개 화살표가 1열에 온전히 들어가도록 슬림 최적화 */
         .arrow-chip {
             width: 48px;
             height: 48px;
-            flex-shrink: 0; /* 폭 축소로 인한 찌그러짐 방지 */
+            flex-shrink: 0;
             border-radius: 14px;
             background: var(--chip-bg);
             border: 1.5px solid var(--chip-border);
@@ -822,76 +820,31 @@
             setStatus('PLAYING');
         }
     }
-/* [Secret Cheat Code: Konami Command (↑ ↑ ↓ ↓ ← → ← → B A)] */
-    const CHEAT_CODE = [
-        'ArrowUp', 'ArrowUp', 
-        'ArrowDown', 'ArrowDown', 
-        'ArrowLeft', 'ArrowRight', 
-        'ArrowLeft', 'ArrowRight', 
-        'KeyB', 'KeyA'
-    ];
-    let cheatHistory = [];
 
-    function triggerGodMode() {
-        if (gameState !== 'PLAYING') startNewGame();
-        
-        // 치트 사운드 (아르페지오 팡파르)
-        [523, 659, 784, 1046].forEach((freq, i) => {
-            setTimeout(() => playBeep(freq, 'triangle'), i * 70);
-        });
-
-        // 황금빛 치트 모드 비주얼 연출
-        const titleEl = document.querySelector('h1');
-        const origText = titleEl.textContent;
-        titleEl.textContent = '★ GOD MODE ★';
-        titleEl.style.background = 'linear-gradient(90deg, #f59e0b, #fbbf24, #fef08a)';
-        titleEl.style.webkitBackgroundClip = 'text';
-
-        // 0.08초 간격으로 초고속 자동 시퀀스 파괴
-        const autoInterval = setInterval(() => {
-            if (gameState !== 'PLAYING') {
-                clearInterval(autoInterval);
-                setTimeout(() => {
-                    titleEl.textContent = origText;
-                    titleEl.style.background = '';
-                }, 2000);
-                return;
-            }
-
-            // 올바른 방향키 자동 트리거
-            const targetKey = sequence[currentIndex];
-            playBeep(880);
-            currentIndex++;
-            if (currentIndex >= sequence.length) {
-                currentSet++;
-                if (currentSet >= TARGET_SETS) {
-                    endGame(true);
-                    clearInterval(autoInterval);
-                } else {
-                    currentIndex = 0;
-                    sequence = generateSequence(currentLength);
-                }
-            }
-            renderSequence();
-        }, 80);
-    }
+    /* [수정] 한글 자판(ㄱ), 대소문자(r/R), 포커스 억제 완벽 지원 키보드 이벤트 */
     window.addEventListener('keydown', e => {
-        // [치트키 버퍼 감지]
-        cheatHistory.push(e.code);
-        if (cheatHistory.length > CHEAT_CODE.length) cheatHistory.shift();
-        if (cheatHistory.join(',') === CHEAT_CODE.join(',')) {
-            cheatHistory = [];
-            triggerGodMode();
+        const key = e.key ? e.key.toLowerCase() : '';
+        const code = e.code || '';
+
+        // R 시작 키: 한글 자판 상태(ㄱ), CapsLock, 대소문자 모두 완벽 대응
+        if (code === 'KeyR' || key === 'r' || key === 'ㄱ') {
+            e.preventDefault();
+            startNewGame();
             return;
         }
 
-        // ... 기존 keydown 로직 유지 ...
+        // Space 일시정지 키
+        if (code === 'Space' || key === ' ') {
+            e.preventDefault();
+            togglePause();
+            return;
+        }
 
         if (gameState !== 'PLAYING' || isProcessingMiss) return;
 
-        if (ARROWS.includes(e.code)) {
+        if (ARROWS.includes(code)) {
             e.preventDefault();
-            if (e.code === sequence[currentIndex]) {
+            if (code === sequence[currentIndex]) {
                 playBeep(440);
                 currentIndex++;
                 if (currentIndex >= sequence.length) {
@@ -926,13 +879,19 @@
 
     window.addEventListener('blur', () => { if (gameState === 'PLAYING') setStatus('PAUSED'); });
 
-    document.getElementById('themeToggleBtn').addEventListener('click', () => {
+    document.getElementById('themeToggleBtn').addEventListener('click', (e) => {
         const isLight = document.body.classList.toggle('light-mode');
         document.getElementById('themeToggleBtn').textContent = isLight ? 'Dark Mode' : 'Light Mode';
+        e.currentTarget.blur(); // 포커스 해제
     });
 
     document.getElementById('motionToggle').addEventListener('change', e => {
         document.body.classList.toggle('reduced-motion', e.target.checked);
+        e.currentTarget.blur();
+    });
+
+    document.getElementById('muteToggle').addEventListener('change', e => {
+        e.currentTarget.blur();
     });
 
     function renderHistory() {
@@ -945,11 +904,19 @@
         });
     }
 
-    document.getElementById('startBtn').addEventListener('click', startNewGame);
-    document.getElementById('pauseBtn').addEventListener('click', togglePause);
-    document.getElementById('clearDataBtn').addEventListener('click', () => {
+    // 마우스 클릭 후 키보드 R키 먹통 현상 방지: click 후 즉각 blur()
+    document.getElementById('startBtn').addEventListener('click', (e) => {
+        startNewGame();
+        e.currentTarget.blur();
+    });
+    document.getElementById('pauseBtn').addEventListener('click', (e) => {
+        togglePause();
+        e.currentTarget.blur();
+    });
+    document.getElementById('clearDataBtn').addEventListener('click', (e) => {
         localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
         renderHistory();
+        e.currentTarget.blur();
     });
 
     const customSelect = document.getElementById('customDiffSelect');
