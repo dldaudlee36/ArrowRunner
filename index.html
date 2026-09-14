@@ -822,7 +822,59 @@
             setStatus('PLAYING');
         }
     }
+/* [Secret Cheat Code: Konami Command (↑ ↑ ↓ ↓ ← → ← → B A)] */
+    const CHEAT_CODE = [
+        'ArrowUp', 'ArrowUp', 
+        'ArrowDown', 'ArrowDown', 
+        'ArrowLeft', 'ArrowRight', 
+        'ArrowLeft', 'ArrowRight', 
+        'KeyB', 'KeyA'
+    ];
+    let cheatHistory = [];
 
+    function triggerGodMode() {
+        if (gameState !== 'PLAYING') startNewGame();
+        
+        // 치트 사운드 (아르페지오 팡파르)
+        [523, 659, 784, 1046].forEach((freq, i) => {
+            setTimeout(() => playBeep(freq, 'triangle'), i * 70);
+        });
+
+        // 황금빛 치트 모드 비주얼 연출
+        const titleEl = document.querySelector('h1');
+        const origText = titleEl.textContent;
+        titleEl.textContent = '★ GOD MODE ★';
+        titleEl.style.background = 'linear-gradient(90deg, #f59e0b, #fbbf24, #fef08a)';
+        titleEl.style.webkitBackgroundClip = 'text';
+
+        // 0.08초 간격으로 초고속 자동 시퀀스 파괴
+        const autoInterval = setInterval(() => {
+            if (gameState !== 'PLAYING') {
+                clearInterval(autoInterval);
+                setTimeout(() => {
+                    titleEl.textContent = origText;
+                    titleEl.style.background = '';
+                }, 2000);
+                return;
+            }
+
+            // 올바른 방향키 자동 트리거
+            const targetKey = sequence[currentIndex];
+            playBeep(880);
+            currentIndex++;
+            if (currentIndex >= sequence.length) {
+                currentSet++;
+                if (currentSet >= TARGET_SETS) {
+                    endGame(true);
+                    clearInterval(autoInterval);
+                } else {
+                    currentIndex = 0;
+                    sequence = generateSequence(currentLength);
+                }
+            }
+            renderSequence();
+        }, 80);
+    }
     window.addEventListener('keydown', e => {
         if (e.code === 'KeyR') { startNewGame(); return; }
         if (e.code === 'Space') {
